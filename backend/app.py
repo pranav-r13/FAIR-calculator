@@ -62,15 +62,16 @@ def calculate_risk():
     ale = lef * loss_magnitude
 
     # 2. SVCC Risk Score Calculation
-    # Formula: (Severity * Vulnerability * Criticality) / Countermeasure
-    # Max Raw Score (approx): (10 * 1.0 * 10) / 1 = 100
-    # Min Raw Score (approx): (1 * 0.0 * 1) / 5 = 0
+    # Formula: ((Severity + (Vulnerability * 10) + Criticality) / 3) * (10 / Countermeasure)
+    # This provides a balanced 0-100 range and sensitivity.
     
-    # Note: Vulnerability is 0.0 - 0.99 from Matrix.
-    raw_svcc = (severity * vulnerability * criticality) / countermeasure
+    # Scale Vulnerability (0.0 - 1.0) to 1-10 scale
+    v_scaled = vulnerability * 10
+    
+    # Average the three impact factors, then multiply by countermeasure coefficient
+    raw_svcc = ((severity + v_scaled + criticality) / 3) * (10 / countermeasure)
     
     # Normalize to 0-100 Gauge
-    # Max possible raw is 100. So we can just clamp it to be safe.
     svcc_score = min(100, max(0, raw_svcc))
 
     # Determine Color
