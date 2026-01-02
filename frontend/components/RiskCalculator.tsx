@@ -49,7 +49,7 @@ export default function RiskCalculator() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:5000/api/calculate", {
+      const res = await fetch("http://127.0.0.1:5001/api/calculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -66,7 +66,7 @@ export default function RiskCalculator() {
       setResults(data.results);
     } catch (error) {
       console.error("Calculation failed:", error);
-      setError("Could not connect to backend server. Is it running on port 5000?");
+      setError("Could not connect to backend server. Is it running on port 5001?");
     } finally {
       setLoading(false);
     }
