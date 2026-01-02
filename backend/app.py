@@ -8,12 +8,14 @@ CORS(app)
 # Vulnerability Probability Matrix (Hardcoded)
 # Row = TCap (1-5), Col = RS (1-5)
 # Access as PROB_MATRIX[tcap][rs] (adjusting for 1-based index)
+# Vulnerability Probability Matrix (Hardcoded)
+# Row = TCap (1-5), Col = RS (1-5)
 PROB_MATRIX = {
-    1: {1: 0.20, 2: 0.10, 3: 0.05, 4: 0.01, 5: 0.00},
-    2: {1: 0.40, 2: 0.25, 3: 0.15, 4: 0.05, 5: 0.02},
-    3: {1: 0.60, 2: 0.45, 3: 0.30, 4: 0.15, 5: 0.05},
-    4: {1: 0.90, 2: 0.70, 3: 0.50, 4: 0.30, 5: 0.10},
-    5: {1: 0.99, 2: 0.95, 3: 0.85, 4: 0.60, 5: 0.25}
+    5: {1: 0.99, 2: 0.95, 3: 0.85, 4: 0.60, 5: 0.25}, # TCap 5 (APT)
+    4: {1: 0.95, 2: 0.80, 3: 0.50, 4: 0.25, 5: 0.05}, # TCap 4 (Crime)
+    3: {1: 0.80, 2: 0.50, 3: 0.20, 4: 0.05, 5: 0.01}, # TCap 3 (Hacktivist)
+    2: {1: 0.50, 2: 0.20, 3: 0.05, 4: 0.01, 5: 0.00}, # TCap 2 (Opportunistic)
+    1: {1: 0.20, 2: 0.05, 3: 0.01, 4: 0.00, 5: 0.00}  # TCap 1 (Skiddie)
 }
 
 DEFAULT_THREATS = {
@@ -32,41 +34,54 @@ def get_threat_defaults():
 def calculate_risk():
     data = request.json
     
+    # Base Inputs
     tcap = int(data.get('tcap', 3))
     rs = int(data.get('rs', 3))
     asset_value = float(data.get('asset_value', 100000))
-    tef = float(data.get('tef', 1)) # Threat Event Frequency (times per year)
+    tef = float(data.get('tef', 1)) 
+
+    # SVCC Inputs
+    severity = float(data.get('severity', 5))     # 1-10
+    criticality = float(data.get('criticality', 5)) # 1-10
+    countermeasure = float(data.get('countermeasure', 3)) # 1-5
 
     # Clamp inputs
     tcap = max(1, min(5, tcap))
     rs = max(1, min(5, rs))
+    severity = max(1, min(10, severity))
+    criticality = max(1, min(10, criticality))
+    countermeasure = max(1, min(5, countermeasure))
 
-    # 1. Vulnerability
+    # 1. FAIR-lite Calculations
     vulnerability = PROB_MATRIX[tcap][rs]
-
-    # 2. Loss Event Frequency (LEF) = TEF * Vulnerability
     lef = tef * vulnerability
-
-    # 3. Loss Magnitude
-    # Assumptions for Financial Formulas:
-    # Primary Loss is derived directly from Asset Value (simplified for FAIR-lite)
-    # Secondary Loss is estimated as a percentage of Primary Loss 
-    # (e.g. fines, reputation, response costs)
     
     primary_loss = asset_value
-    # Secondary loss multiplier increases with LEF/severity? 
-    # Let's keep it simple: 50% usually
     secondary_loss = primary_loss * 0.5 
-    
     loss_magnitude = primary_loss + secondary_loss
-
-    # 4. Annualized Loss Expectancy (ALE)
     ale = lef * loss_magnitude
 
-    # Generate Capability Cliff Data
-    # Probability of success vs RS (for a fixed TCap) ??
-    # Or Probability vs TCap (for fixed RS)?
-    # Usually Cliff shows Probability of Success for different Capabilities giving current RS.
+    # 2. SVCC Risk Score Calculation
+    # Formula: (Severity * Vulnerability * Criticality) / Countermeasure
+    # Max Raw Score (approx): (10 * 1.0 * 10) / 1 = 100
+    # Min Raw Score (approx): (1 * 0.0 * 1) / 5 = 0
+    
+    # Note: Vulnerability is 0.0 - 0.99 from Matrix.
+    raw_svcc = (severity * vulnerability * criticality) / countermeasure
+    
+    # Normalize to 0-100 Gauge
+    # Max possible raw is 100. So we can just clamp it to be safe.
+    svcc_score = min(100, max(0, raw_svcc))
+
+    # Determine Color
+    if svcc_score <= 30:
+        svcc_color = "Green" # Resilient
+    elif svcc_score <= 70:
+        svcc_color = "Yellow" # Exposed
+    else:
+        svcc_color = "Red" # Critical
+
+    # Cliff Data
     cliff_data = []
     for t in range(1, 6):
         prob = PROB_MATRIX[t][rs]
@@ -81,7 +96,10 @@ def calculate_risk():
             "tcap": tcap,
             "rs": rs,
             "asset_value": asset_value,
-            "tef": tef
+            "tef": tef,
+            "severity": severity,
+            "criticality": criticality,
+            "countermeasure": countermeasure
         },
         "results": {
             "vulnerability": vulnerability,
@@ -90,7 +108,11 @@ def calculate_risk():
             "secondary_loss": secondary_loss,
             "single_loss_expectancy": loss_magnitude,
             "ale": round(ale, 2),
-            "cliff_data": cliff_data
+            "cliff_data": cliff_data,
+            "svcc": {
+                "score": round(svcc_score, 2),
+                "color": svcc_color
+            }
         }
     }
 
